@@ -5,7 +5,10 @@ import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.ViewGroup;
 
+import java.util.List;
+
 import cn.modificator.launcher.R;
+import cn.modificator.launcher.model.AppDataCenter;
 
 import static android.view.View.MeasureSpec.EXACTLY;
 import static android.view.View.MeasureSpec.makeMeasureSpec;
@@ -13,13 +16,8 @@ import static android.view.View.MeasureSpec.makeMeasureSpec;
 /**
  * E-Ink 桌面网格布局 ViewGroup。
  * <p>
- * 纯布局容器，职责仅限于：
- * <ul>
- *   <li>网格布局（行列排列、尺寸测量）</li>
- *   <li>手势检测（滑动翻页）</li>
- *   <li>向 {@link LauncherAdapter} 请求 ViewHolder 的创建与绑定</li>
- * </ul>
- * 所有数据管理和交互逻辑由 {@link LauncherAdapter} 处理。
+ * 支持"跨格"条目：普通应用 1×1，文件夹 2×2（位置由 {@link AppDataCenter.Placement} 给出）。
+ * 职责仅限于：网格布局（含跨度）、手势翻页、向 Adapter 要 ViewHolder。
  */
 public class EInkLauncherView extends ViewGroup {
 
@@ -37,16 +35,13 @@ public class EInkLauncherView extends ViewGroup {
   // 字段
   // =========================================================================
 
-  // 网格参数
   private int rowNum = 5;
   private int colNum = 5;
   private boolean hideDivider = false;
 
-  // 外部依赖
   private LauncherAdapter adapter;
   private OnPageChangeListener pageChangeListener;
 
-  // 滑动检测
   private float touchDownX;
   private float touchDownY;
   private float swipeThreshold;
@@ -80,7 +75,7 @@ public class EInkLauncherView extends ViewGroup {
     if (adapter != null) {
       adapter.attachView(this);
     }
-    resetGrid();
+    rebuildGrid();
   }
 
   public LauncherAdapter getAdapter() {
@@ -96,35 +91,32 @@ public class EInkLauncherView extends ViewGroup {
   // 网格配置
   // =========================================================================
 
-  /**
-   * 一次性配置所有网格参数，仅触发一次 {@code resetGrid()}。
-   */
   public void configure(int colNum, int rowNum, boolean hideDivider) {
     this.colNum = colNum;
     this.rowNum = rowNum;
     this.hideDivider = hideDivider;
-    resetGrid();
+    rebuildGrid();
   }
 
   public void setGridSize(int colNum, int rowNum) {
     this.colNum = colNum;
     this.rowNum = rowNum;
-    resetGrid();
+    rebuildGrid();
   }
 
   public void setColNum(int colNum) {
     this.colNum = colNum;
-    resetGrid();
+    rebuildGrid();
   }
 
   public void setRowNum(int rowNum) {
     this.rowNum = rowNum;
-    resetGrid();
+    rebuildGrid();
   }
 
   public void setHideDivider(boolean hideDivider) {
     this.hideDivider = hideDivider;
-    resetGrid();
+    rebuildGrid();
   }
 
   // =========================================================================
@@ -141,14 +133,22 @@ public class EInkLauncherView extends ViewGroup {
     int cellW = w / colNum;
     int cellH = h / rowNum;
 
-    for (int row = 0; row < rowNum; row++) {
-      for (int col = 0; col < colNum; col++) {
-        int index = row * colNum + col;
-        if (index >= getChildCount()) return;
-        getChildAt(index).layout(
-            col * cellW, row * cellH,
-            (col + 1) * cellW, (row + 1) * cellH);
+    List<AppDataCenter.Placement> placements = getPlacements();
+    for (int i = 0; i < getChildCount(); i++) {
+      int spanW = 1;
+      int spanH = 1;
+      int col = i % colNum;
+      int row = i / colNum;
+      if (placements != null && i < placements.size()) {
+        AppDataCenter.Placement p = placements.get(i);
+        spanW = p.spanW;
+        spanH = p.spanH;
+        col = p.col;
+        row = p.row;
       }
+      getChildAt(i).layout(
+          col * cellW, row * cellH,
+          (col + spanW) * cellW, (row + spanH) * cellH);
     }
   }
 
@@ -159,11 +159,26 @@ public class EInkLauncherView extends ViewGroup {
     int h = getAdjustedHeight();
     if (w <= 0 || h <= 0) return;
 
-    int cellWSpec = makeMeasureSpec(w / colNum, EXACTLY);
-    int cellHSpec = makeMeasureSpec(h / rowNum, EXACTLY);
+    int cellW = w / colNum;
+    int cellH = h / rowNum;
+
+    List<AppDataCenter.Placement> placements = getPlacements();
     for (int i = 0; i < getChildCount(); i++) {
-      getChildAt(i).measure(cellWSpec, cellHSpec);
+      int spanW = 1;
+      int spanH = 1;
+      if (placements != null && i < placements.size()) {
+        AppDataCenter.Placement p = placements.get(i);
+        spanW = p.spanW;
+        spanH = p.spanH;
+      }
+      getChildAt(i).measure(
+          makeMeasureSpec(cellW * spanW, EXACTLY),
+          makeMeasureSpec(cellH * spanH, EXACTLY));
     }
+  }
+
+  private List<AppDataCenter.Placement> getPlacements() {
+    return adapter == null ? null : adapter.getPlacements();
   }
 
   private int getAdjustedWidth() {
@@ -178,28 +193,32 @@ public class EInkLauncherView extends ViewGroup {
   // 网格构建
   // =========================================================================
 
-  private void resetGrid() {
+  /** Adapter 换页后调用：条目数或跨度可能变了 */
+  void rebuildIfNeeded() {
+    rebuildGrid();
+  }
+
+  private void rebuildGrid() {
     if (adapter == null) return;
-    int targetCount = rowNum * colNum;
+    List<AppDataCenter.Placement> placements = getPlacements();
+    int targetCount = placements == null ? 0 : placements.size();
 
-    if (adapter.getHolderCount() == targetCount) {
-      // 数量不变，仅刷新背景
+    if (getChildCount() != targetCount) {
+      removeAllViews();
+      adapter.clearHolders();
       for (int i = 0; i < targetCount; i++) {
-        getChildAt(i).setBackgroundResource(getItemBackground(i));
+        LauncherAdapter.ItemViewHolder holder = adapter.createViewHolder(this);
+        addView(holder.itemView);
       }
-      rebind();
-      return;
     }
 
-    // 数量变化，完整重建
-    removeAllViews();
-    adapter.clearHolders();
-
-    for (int i = 0; i < targetCount; i++) {
-      LauncherAdapter.ItemViewHolder holder = adapter.createViewHolder(this);
-      holder.itemView.setBackgroundResource(getItemBackground(i));
-      addView(holder.itemView);
+    for (int i = 0; i < getChildCount(); i++) {
+      AppDataCenter.Placement p = placements == null || i >= placements.size()
+          ? null : placements.get(i);
+      getChildAt(i).setBackgroundResource(getItemBackground(p));
     }
+
+    requestLayout();
     rebind();
   }
 
@@ -210,17 +229,16 @@ public class EInkLauncherView extends ViewGroup {
     }
   }
 
-  private int getItemBackground(int index) {
-    int total = rowNum * colNum;
-    if (hideDivider || index == total - 1) {
+  private int getItemBackground(AppDataCenter.Placement p) {
+    if (hideDivider || p == null) {
       return R.drawable.app_item_final;
-    } else if (index % colNum == colNum - 1) {
-      return R.drawable.app_item_right;
-    } else if (index >= (rowNum - 1) * colNum) {
-      return R.drawable.app_item_bottom;
-    } else {
-      return R.drawable.app_item_normal;
     }
+    boolean lastCol = p.col + p.spanW >= colNum;
+    boolean lastRow = p.row + p.spanH >= rowNum;
+    if (lastCol && lastRow) return R.drawable.app_item_final;
+    if (lastCol) return R.drawable.app_item_right;
+    if (lastRow) return R.drawable.app_item_bottom;
+    return R.drawable.app_item_normal;
   }
 
   // =========================================================================

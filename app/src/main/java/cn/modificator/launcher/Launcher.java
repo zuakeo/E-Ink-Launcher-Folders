@@ -26,6 +26,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -184,6 +185,7 @@ public class Launcher extends Activity
     binder.setIconCache(iconCache);
     binder.setFolderStore(folderStore);
     binder.setAppNameLines(config.getAppNameLines());
+    binder.setShowFolderName(config.isShowFolderName());
     binder.setHideAppPkg(config.getHideApps());
     adapter = new LauncherAdapter();
     adapter.setBinder(binder);
@@ -298,6 +300,12 @@ public class Launcher extends Activity
   }
 
   @Override
+  public void onShowFolderNameChanged(boolean show) {
+    binder.setShowFolderName(show);
+    dataCenter.refreshAppList(binder.isDelete());
+  }
+
+  @Override
   public void onShowCustomIconChanged(boolean show) {
     iconCache.markDirty();
     refreshIcons();
@@ -369,6 +377,23 @@ public class Launcher extends Activity
         dataCenter.refreshAppList();
       }
     });
+  }
+
+  @Override
+  public void onFolderChildClick(String itemKey) {
+    String pkg = AppDataCenter.packageOfKey(itemKey);
+    String activity = AppDataCenter.activityOfKey(itemKey);
+    if (pkg == null || activity == null) return;
+
+    Intent intent = new Intent(Intent.ACTION_MAIN);
+    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+    intent.addCategory(Intent.CATEGORY_LAUNCHER);
+    intent.setComponent(new ComponentName(pkg, activity));
+    try {
+      startActivity(intent);
+    } catch (Exception e) {
+      Toast.makeText(this, "启动失败：" + pkg, Toast.LENGTH_SHORT).show();
+    }
   }
 
   @Override

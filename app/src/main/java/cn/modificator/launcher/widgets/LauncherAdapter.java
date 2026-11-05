@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Observer;
 
 import cn.modificator.launcher.R;
+import cn.modificator.launcher.model.AppDataCenter;
 import cn.modificator.launcher.model.ObservableFloat;
 
 /**
@@ -58,7 +59,7 @@ public class LauncherAdapter {
   // =========================================================================
 
   private final ObservableFloat fontSizeObservable = new ObservableFloat();
-  private final List<android.content.pm.ResolveInfo> dataList = new ArrayList<>();
+  private final List<AppDataCenter.Placement> placements = new ArrayList<>();
   private final List<ItemViewHolder> holders = new ArrayList<>();
 
   private AppItemBinder binder;
@@ -117,11 +118,12 @@ public class LauncherAdapter {
   // 数据
   // =========================================================================
 
-  /** 设置当前页要显示的应用列表，自动触发重新绑定 */
-  public void setAppList(List<android.content.pm.ResolveInfo> appList) {
-    dataList.clear();
-    dataList.addAll(appList);
+  /** 设置当前页的排版结果，自动触发重新绑定 */
+  public void setPlacements(List<AppDataCenter.Placement> list) {
+    placements.clear();
+    placements.addAll(list);
     if (attachedView != null) {
+      attachedView.rebuildIfNeeded();
       attachedView.rebind();
     }
   }
@@ -134,11 +136,12 @@ public class LauncherAdapter {
   }
 
   public int getItemCount() {
-    return dataList.size();
+    return placements.size();
   }
 
-  List<android.content.pm.ResolveInfo> getData() {
-    return dataList;
+  /** 当前页的排版结果（包级可见，EInkLauncherView 布局时用） */
+  List<AppDataCenter.Placement> getPlacements() {
+    return placements;
   }
 
   // =========================================================================
@@ -182,15 +185,15 @@ public class LauncherAdapter {
   /** 委派给 Binder 执行所有 ViewHolder 的数据绑定与状态更新 */
   void bindAll() {
     if (binder != null) {
-      binder.bindAll(holders, dataList);
-      binder.updateDeleteState(holders, dataList);
+      binder.bindAll(holders, placements);
+      binder.updateDeleteState(holders, placements);
     }
   }
 
   /** 仅更新管理模式 UI 状态 */
   void updateDeleteState() {
     if (binder != null) {
-      binder.updateDeleteState(holders, dataList);
+      binder.updateDeleteState(holders, placements);
     }
   }
 }

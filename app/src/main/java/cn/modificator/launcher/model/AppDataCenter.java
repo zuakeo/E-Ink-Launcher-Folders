@@ -3,7 +3,6 @@ package cn.modificator.launcher.model;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.widget.TextView;
 
@@ -21,7 +20,10 @@ import cn.modificator.launcher.widgets.AppItemBinder;
 import cn.modificator.launcher.widgets.LauncherAdapter;
 
 /**
- * 应用数据管理中心，负责加载应用列表（含文件夹）和分页逻辑。
+ * 应用数据管理中心，负责加载应用列表（含文件夹）、分页与排版。
+ * <p>
+ * 网格支持"跨格"条目：普通应用占 1×1，文件夹占 2×2。
+ * 每页按顺序做一次简单的首次适配（first-fit）装箱，得到每个条目的列/行/跨度。
  */
 public class AppDataCenter {
 
@@ -32,8 +34,28 @@ public class AppDataCenter {
   /** 文件夹条目的包名前缀，后面接文件夹 id */
   public static final String FOLDER_PACKAGE_PREFIX = "E-ink_Launcher.Folder:";
 
+  /** 一个条目在某一页里的位置 */
+  public static class Placement {
+    public final ResolveInfo info;
+    public final int index;
+    public final int col;
+    public final int row;
+    public final int spanW;
+    public final int spanH;
+
+    Placement(ResolveInfo info, int index, int col, int row, int spanW, int spanH) {
+      this.info = info;
+      this.index = index;
+      this.col = col;
+      this.row = row;
+      this.spanW = spanW;
+      this.spanH = spanH;
+    }
+  }
+
   private final Context mContext;
   private final List<ResolveInfo> mApps = new ArrayList<>();
+  private final List<List<Placement>> pages = new ArrayList<>();
   private int pageIndex = 0;
   private int pageCount = 0;
   private int colNum = 5;
@@ -64,7 +86,9 @@ public class AppDataCenter {
 
   public void setPageStatus(TextView pageStatus) {
     this.pageStatus = pageStatus;
-    pageStatus.setText((pageIndex + 1) + "/" + (pageCount + 1));
+    if (pageStatus != null) {
+      pageStatus.setText((pageIndex + 1) + "/" + (pageCount + 1));
+    }
   }
 
   public void setFolderStore(FolderStore folderStore) {
@@ -102,6 +126,14 @@ public class AppDataCenter {
     return bar < 0 ? body : body.substring(0, bar);
   }
 
+  /** 从条目键里取 Activity 名，格式不对返回 null */
+  public static String activityOfKey(String key) {
+    if (key == null || !key.startsWith(FolderStore.APP_PREFIX)) return null;
+    String body = key.substring(FolderStore.APP_PREFIX.length());
+    int bar = body.indexOf('|');
+    return bar < 0 ? null : body.substring(bar + 1);
+  }
+
   // =========================================================================
   // 隐藏应用管理
   // =========================================================================
@@ -122,13 +154,13 @@ public class AppDataCenter {
 
   public void setColNum(int colNum) {
     this.colNum = colNum;
-    updatePageCount();
+    packPages();
     setPageShow();
   }
 
   public void setRowNum(int rowNum) {
     this.rowNum = rowNum;
-    updatePageCount();
+    packPages();
     setPageShow();
   }
 
@@ -136,8 +168,16 @@ public class AppDataCenter {
   public void setGridSize(int colNum, int rowNum) {
     this.colNum = colNum;
     this.rowNum = rowNum;
-    updatePageCount();
+    packPages();
     setPageShow();
+  }
+
+  public int getColNum() {
+    return colNum;
+  }
+
+  public int getRowNum() {
+    return rowNum;
   }
 
   // =========================================================================
@@ -195,9 +235,21 @@ public class AppDataCenter {
 
   /** 让某一项所在页显示出来 */
   public void showPageOfItem(int index) {
-    int perPage = Math.max(1, colNum * rowNum);
-    pageIndex = Math.max(0, Math.min(index / perPage, pageCount));
-    setPageShow();
+    for (int p = 0; p < pages.size(); p++) {
+      for (Placement placement : pages.get(p)) {
+        if (placement.index == index) {
+          pageIndex = p;
+          setPageShow();
+          return;
+        }
+      }
+    }
+  }
+
+  /** 当前页的排版结果（供 View 布局用） */
+  public List<Placement> getCurrentPagePlacements() {
+    if (pageIndex < 0 || pageIndex >= pages.size()) return new ArrayList<>();
+    return pages.get(pageIndex);
   }
 
   // =========================================================================
@@ -292,7 +344,7 @@ public class AppDataCenter {
       mApps.add(createWifiIcon());
     }
     sortApps();
-    updatePageCount();
+    packPages();
   }
 
   private void loadAllApps() {
@@ -312,24 +364,86 @@ public class AppDataCenter {
       binder.setHideAppPkg(hideApps);
     }
     sortApps();
-    updatePageCount();
+    packPages();
   }
 
   private void setPageShow() {
-    int itemCount = colNum * rowNum;
-    int pageStart = pageIndex * itemCount;
-    int pageEnd = Math.min(pageStart + itemCount, mApps.size());
-    if (pageStart > pageEnd) pageStart = pageEnd;
-    adapter.setAppList(mApps.subList(pageStart, pageEnd));
-    pageStatus.setText((pageIndex + 1) + "/" + (pageCount + 1));
+    if (adapter == null) return;
+    adapter.setPlacements(getCurrentPagePlacements());
+    if (pageStatus != null) {
+      pageStatus.setText((pageIndex + 1) + "/" + (pageCount + 1));
+    }
   }
 
-  private void updatePageCount() {
-    int itemCount = colNum * rowNum;
-    pageCount = mApps.size() / itemCount - (mApps.size() % itemCount == 0 ? 1 : 0);
-    pageCount = Math.max(pageCount, 0);
+  // =========================================================================
+  // 装箱（支持 1×1 与 2×2）
+  // =========================================================================
+
+  private int spanOf(ResolveInfo info) {
+    if (!isFolderPackage(info.activityInfo.packageName)) return 1;
+    if (colNum < 2 || rowNum < 2) return 1;
+    return 2;
+  }
+
+  private void packPages() {
+    pages.clear();
+    pageCount = 0;
+    if (colNum <= 0 || rowNum <= 0) return;
+
+    List<Placement> current = new ArrayList<>();
+    boolean[][] used = new boolean[colNum][rowNum];
+
+    for (int i = 0; i < mApps.size(); i++) {
+      ResolveInfo info = mApps.get(i);
+      int span = spanOf(info);
+      int[] pos = findSlot(used, span);
+      if (pos == null) {
+        pages.add(current);
+        current = new ArrayList<>();
+        used = new boolean[colNum][rowNum];
+        pos = findSlot(used, span);
+        if (pos == null) {
+          // 极端情况（网格太小），退化成 1×1
+          span = 1;
+          pos = findSlot(used, span);
+          if (pos == null) break;
+        }
+      }
+      for (int c = pos[0]; c < pos[0] + span; c++) {
+        for (int r = pos[1]; r < pos[1] + span; r++) {
+          used[c][r] = true;
+        }
+      }
+      current.add(new Placement(info, i, pos[0], pos[1], span, span));
+    }
+    pages.add(current);
+
+    pageCount = Math.max(0, pages.size() - 1);
     pageIndex = Math.min(pageIndex, pageCount);
   }
+
+  /** 找第一个能放下 span×span 的位置 */
+  private int[] findSlot(boolean[][] used, int span) {
+    for (int r = 0; r + span <= rowNum; r++) {
+      for (int c = 0; c + span <= colNum; c++) {
+        boolean free = true;
+        for (int cc = c; cc < c + span && free; cc++) {
+          for (int rr = r; rr < r + span; rr++) {
+            if (used[cc][rr]) {
+              free = false;
+              break;
+            }
+          }
+        }
+        if (free) return new int[]{c, r};
+      }
+    }
+    return null;
+  }
+
+  // =========================================================================
+  // 排序实现
+  // =========================================================================
 
   private void sortApps() {
     if (isManualSort() && folderStore != null) {

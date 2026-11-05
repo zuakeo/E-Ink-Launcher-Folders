@@ -23,6 +23,7 @@ public class Config {
   public static final String KEY_SHOW_STATUS_BAR = "launcherShowStatusBar";
   public static final String KEY_SHOW_CUSTOM_ICON = "launcherShowCustomIcon";
   public static final String KEY_SORT_MODE = "launcherSortMode";
+  public static final String KEY_SHOW_FOLDER_NAME = "launcherShowFolderName";
 
   // ---- 默认值 ----
   private static final int DEFAULT_COL_NUM = 5;
@@ -33,6 +34,7 @@ public class Config {
   private static final boolean DEFAULT_SHOW_STATUS_BAR = true;
   private static final boolean DEFAULT_SHOW_CUSTOM_ICON = false;
   private static final int DEFAULT_SORT_MODE = 0;
+  private static final boolean DEFAULT_SHOW_FOLDER_NAME = false;
 
   private static final String PREFS_FILE = "launcherPropertyFile";
 
@@ -47,6 +49,7 @@ public class Config {
   private boolean showStatusBar;
   private boolean showCustomIcon;
   private int sortMode = -1;
+  private boolean showFolderName;
   private final Set<String> hideApps = new HashSet<>();
   private boolean hideAppsLoaded = false;
 
@@ -57,6 +60,7 @@ public class Config {
     this.showStatusBar = prefs.getBoolean(KEY_SHOW_STATUS_BAR, DEFAULT_SHOW_STATUS_BAR);
     this.showCustomIcon = prefs.getBoolean(KEY_SHOW_CUSTOM_ICON, DEFAULT_SHOW_CUSTOM_ICON);
     this.appNameLines = prefs.getInt(KEY_APP_NAME_LINES, DEFAULT_APP_NAME_LINES);
+    this.showFolderName = prefs.getBoolean(KEY_SHOW_FOLDER_NAME, DEFAULT_SHOW_FOLDER_NAME);
   }
 
   // ---- 列数 ----
@@ -193,5 +197,16 @@ public class Config {
     if (this.sortMode == mode) return;
     this.sortMode = mode;
     prefs.edit().putInt(KEY_SORT_MODE, mode).apply();
+  }
+
+  // ---- 文件夹名字 ----
+
+  public boolean isShowFolderName() {
+    return showFolderName;
+  }
+
+  public void setShowFolderName(boolean show) {
+    this.showFolderName = show;
+    prefs.edit().putBoolean(KEY_SHOW_FOLDER_NAME, show).apply();
   }
 }
