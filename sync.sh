@@ -97,6 +97,19 @@ s = re.sub(r'versionName\s*=\s*"[^"]+"', 'versionName = "%s"' % ver, s, count=1)
 s = re.sub(r'versionCode\s*=\s*\d+', 'versionCode = %s' % code, s, count=1)
 open(path, "w", encoding="utf-8").write(s)
 PY
+    # README：顶部下载链接 + 变更记录插一行
+    python - README.md "$NEWVER" "E-Ink-Launcher-Folders-${NEWVER}.apk" "$MSG" <<'PY'
+import re, sys
+path, ver, apk, note = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+s = open(path, encoding="utf-8").read()
+s = re.sub(r'E-Ink-Launcher-Folders-[0-9A-Za-z._-]+\.apk', apk, s)
+note = (note or "发布 " + ver).replace("|", "/")
+row = "| {} | {} |\n".format(ver, note)
+anchor = "| 版本 | 内容 |\n|---|---|\n"
+if anchor in s and row not in s:
+    s = s.replace(anchor, anchor + row, 1)
+open(path, "w", encoding="utf-8").write(s)
+PY
   fi
   FINALVER="$NEWVER"
 else
@@ -181,20 +194,25 @@ s = s.replace("{{VERSION}}", ver).replace("{{APK}}", apk).replace("{{CHANGES}}",
 open(out, "w", encoding="utf-8").write(s)
 PY
 
+  JSON_FILE="$(mktemp)"
+  python - "$TAG" "$BODY_FILE" "$JSON_FILE" <<'PY'
+import json, sys
+tag, body_file, out = sys.argv[1], sys.argv[2], sys.argv[3]
+body = open(body_file, encoding="utf-8").read()
+json.dump({"tag_name": tag, "name": tag, "body": body,
+           "draft": False, "prerelease": False},
+          open(out, "w", encoding="utf-8"), ensure_ascii=False)
+PY
+
   REL_ID="$(gh api "repos/$SLUG/releases/tags/$TAG" --jq '.id' 2>/dev/null || true)"
   if [ -z "$REL_ID" ]; then
-    REL_ID="$(gh api -X POST "repos/$SLUG/releases" \
-      -f tag_name="$TAG" \
-      -f name="$TAG" \
-      -f body=@"$BODY_FILE" \
-      -F draft=false -F prerelease=false \
-      --jq '.id')"
+    REL_ID="$(gh api -X POST "repos/$SLUG/releases" --input "$JSON_FILE" --jq '.id')"
     echo "   新建 Release id=$REL_ID"
   else
-    gh api -X PATCH "repos/$SLUG/releases/$REL_ID" \
-      -f name="$TAG" -f body=@"$BODY_FILE" --jq '.id' >/dev/null
+    gh api -X PATCH "repos/$SLUG/releases/$REL_ID" --input "$JSON_FILE" --jq '.id' >/dev/null
     echo "   Release 已存在，更新说明 id=$REL_ID"
   fi
+  rm -f "$JSON_FILE" 2>/dev/null || true
 
   # 同名附件先删再传
   OLD_ASSET="$(gh api "repos/$SLUG/releases/$REL_ID/assets" \
@@ -210,7 +228,7 @@ PY
     "https://uploads.github.com/repos/$SLUG/releases/$REL_ID/assets?name=$APK_NAME" \
     | python -c "import sys,json;d=json.load(sys.stdin);print('   已上传：{} ({} B)'.format(d.get('name'), d.get('size')))"
 
-  rm -f "$BODY_FILE"
+  rm -f "$BODY_FILE" 2>/dev/null || true
   echo "   https://github.com/$SLUG/releases/tag/$TAG"
 fi
 
