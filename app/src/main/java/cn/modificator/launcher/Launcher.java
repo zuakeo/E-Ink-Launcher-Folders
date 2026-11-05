@@ -13,6 +13,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.Configuration;
 import android.content.res.ColorStateList;
 import android.net.Uri;
 import android.os.BatteryManager;
@@ -202,9 +203,8 @@ public class Launcher extends Activity
     dataCenter.setPageStatus(pageStatus);
     dataCenter.setAdapter(adapter);
 
-    // 一次性配置网格参数，避免多次重建
-    launcherView.configure(config.getColNum(), config.getRowNum(), config.isHideDivider());
-    dataCenter.setGridSize(config.getColNum(), config.getRowNum());
+    // 一次性配置网格参数，避免多次重建（横屏会自动对调行列）
+    applyGrid();
 
     // 翻页按钮
     findViewById(R.id.lastPage).setOnClickListener(new View.OnClickListener() {
@@ -268,14 +268,12 @@ public class Launcher extends Activity
 
   @Override
   public void onRowNumChanged(int rowNum) {
-    launcherView.setRowNum(rowNum);
-    dataCenter.setRowNum(rowNum);
+    applyGrid();
   }
 
   @Override
   public void onColNumChanged(int colNum) {
-    launcherView.setColNum(colNum);
-    dataCenter.setColNum(colNum);
+    applyGrid();
   }
 
   @Override
@@ -327,6 +325,31 @@ public class Launcher extends Activity
   // =========================================================================
   // 布局更新
   // =========================================================================
+
+  private boolean isLandscape() {
+    return getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+  }
+
+  /**
+   * 应用网格：竖屏用设置里的「列 × 行」，横屏对调成「行 × 列」。
+   * <p>
+   * 只改排版，不动应用顺序 —— 顺序存在 AppDataCenter.mApps 里，重新装箱时顺序不变，
+   * 只是每页能放的数量和换行位置变了。
+   */
+  private void applyGrid() {
+    if (launcherView == null || dataCenter == null || config == null) return;
+    int cols = isLandscape() ? config.getRowNum() : config.getColNum();
+    int rows = isLandscape() ? config.getColNum() : config.getRowNum();
+    launcherView.configure(cols, rows, config.isHideDivider());
+    dataCenter.setGridSize(cols, rows);
+  }
+
+  @Override
+  public void onConfigurationChanged(Configuration newConfig) {
+    super.onConfigurationChanged(newConfig);
+    applyGrid();
+    applyStatusBarVisibility();
+  }
 
   private void refreshIcons() {
     if (adapter == null || iconCache == null) return;

@@ -30,6 +30,7 @@
 
         <activity
             android:name="cn.modificator.launcher.Launcher"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:launchMode="singleInstance"
             android:exported="true">
             <intent-filter>
