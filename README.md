@@ -202,7 +202,59 @@ Manifest 里给 `Launcher` 加
 
 ---
 
-## 3. 截图
+## 3. 在什么设备上做的、测过什么
+
+### 3.1 开发/测试设备
+
+| 项 | 值 |
+|---|---|
+| 机型 | **海信 Hisense 墨水屏手机 HITV205N**（电子墨水屏 EPD） |
+| 系统 | Android 11 |
+| 屏幕 | 720 × 1440 物理像素，320 dpi（1dp = 2px） |
+| 桌面网格 | 竖屏 **4 列 × 6 行**（本仓库作者的日常配置，可在设置里改） |
+| 权限 | 已 Magisk root（仅为测试时用 adb + su 备份/还原 `shared_prefs`，**App 本身不需要 root**） |
+| 编译环境 | Windows 11 + JDK 17.0.21 + Android SDK platform 36 / build-tools 36.0.0 + Gradle 9.1 |
+| 安装方式 | `adb install -r`（debug 签名），`cmd package set-home-activity` 设为默认桌面 |
+
+墨水屏的刷新特性（局部刷新、残影、`screencap` 有时拿到上一帧）在测试里反复出现，
+所以下面的“验证”都是**按一下主页/翻一页触发重绘后**再截图确认的。
+
+### 3.2 做过的测试
+
+都是在这台机器上真机点出来的，测试手段是 `adb shell input`（点击/长按/滑动）+
+`screencap` 截图 + `uiautomator dump` 读控件树核对坐标与文字。
+
+| # | 测试项 | 结果 |
+|---|---|---|
+| 1 | 编译 `assembleDebug`、安装、设为默认桌面、重启后仍是默认桌面 | ✅ |
+| 2 | 覆盖安装（`install -r`）保留原配置：4 列 6 行、字号 10、不显示应用名、12 个隐藏应用 | ✅ |
+| 3 | 长按应用 →「移入文件夹…」→「＋ 新建文件夹」建文件夹 | ✅ |
+| 4 | 文件夹占满 2×2，九宫格显示 9 个图标，图标大小/间距均匀 | ✅ |
+| 5 | 点九宫格里的图标 → **直接启动对应 App**（点「便签」进备忘录、点「翻译」进翻译） | ✅ |
+| 6 | 点图标之间的缝隙 / 九宫格外的留白 → 展开文件夹弹窗（9 格全满时也能展开） | ✅ |
+| 7 | 弹窗内 4 列显示全部应用（测过 9 个、14 个、15 个的文件夹），点图标启动并关闭弹窗 | ✅ |
+| 8 | 弹窗内长按 → 移出文件夹：该应用回到桌面且排在文件夹后面，九宫格自动补成 3+3+2 | ✅ |
+| 9 | 重命名、解散文件夹（应用全部放回桌面）、移空后文件夹自动消失 | ✅ |
+| 10 | 设置「显示文件夹名称」开/关：开→九宫格下显示一行名字，关→不显示 | ✅ |
+| 11 | 「调整图标顺序」：点一个图标出现黑框 → 点目标格 → 两格互换；`完成`/返回退出 | ✅ |
+| 12 | 顺序持久化：改完重启桌面，顺序保持 | ✅ |
+| 13 | 翻页：第 1 页 ↔ 第 2 页来回划；从**空白格子**起手也能翻；滑动结束不会误启动 App | ✅ |
+| 14 | 横屏：4×6 自动变 6×4，顺序与前 6 个图标完全一致；转回竖屏恢复 4×6 | ✅ |
+| 15 | 文件夹弹窗图标错位 bug 修复后复测：9 个图标全部对齐、大小一致 | ✅ |
+| 16 | 卸载重装 / 覆盖安装后 App 不崩、无 ANR | ✅ |
+
+### 3.3 没测过 / 不保证的
+
+- 除 HITV205N 以外的任何机型、分辨率、dpi（尤其高刷彩屏、平板、折叠屏）
+- 横屏下的文件夹（2×2 在 6×4 里的排布）、横屏下的排序模式
+- 一个文件夹里超过 15 个应用的分页表现（第 10 个以后只在弹窗里滚动查看）
+- 系统深色模式、动态取色、图标包主题（本改造只做黑白）
+- 上游自带的 FTP 服务、锁屏、崩溃上报等模块（我没有改动，也没专项测）
+- 非 Android 11 的权限模型（`targetSdk 36`）
+
+---
+
+## 4. 截图
 
 | 竖屏 4×6 | 横屏 6×4 | 文件夹弹窗 |
 |---|---|---|
@@ -210,7 +262,7 @@ Manifest 里给 `Launcher` 加
 
 ---
 
-## 4. 编译
+## 5. 编译
 
 需要 JDK 17 + Android SDK（platform 36 / build-tools 36）+ Gradle 9.1（用 wrapper 即可）。
 
@@ -238,7 +290,7 @@ adb shell cmd package set-home-activity cn.modificator.launcher/.Launcher
 
 ---
 
-## 5. 已知限制
+## 6. 已知限制
 
 - 只在**海信 HITV205N（Android 11，720×1440，320dpi）** 上验证过，其它机型/分辨率没测
 - 横屏下格子是 233×135（宽而矮），图标会被格子高度撑得比较满
@@ -246,7 +298,7 @@ adb shell cmd package set-home-activity cn.modificator.launcher/.Launcher
 - 个人自用改造，没有做多语言（界面中文为主，英文串沿用上游）
 - 上游遗留：`targetSdk 36` 但很多逻辑按旧 API 写，换新系统可能要注意权限
 
-## 6. 变更记录
+## 7. 变更记录
 
 | 版本 | 内容 |
 |---|---|
@@ -259,7 +311,7 @@ adb shell cmd package set-home-activity cn.modificator.launcher/.Launcher
 
 ---
 
-## 7. 致谢与许可
+## 8. 致谢与许可
 
 - 全部基础代码来自 **[Modificator/E-Ink-Launcher](https://github.com/Modificator/E-Ink-Launcher)**，作者 **Modificator**，Apache-2.0
 - 线条图标来自 **[Arcticons](https://github.com/Donnnno/Arcticons)**（CC BY-SA 4.0）
@@ -267,7 +319,7 @@ adb shell cmd package set-home-activity cn.modificator.launcher/.Launcher
 
 ---
 
-## 8. 上游原始说明（保留）
+## 9. 上游原始说明（保留）
 
 `E-Ink Launcher` is an Android launcher for Electronic paper book.
 
