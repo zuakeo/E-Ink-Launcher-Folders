@@ -1,0 +1,63 @@
+E-Ink Launcher (modified fork)
+Copyright 2026 the fork's author
+Based on E-Ink Launcher by Modificator (https://github.com/Modificator/E-Ink-Launcher)
+Licensed under the Apache License, Version 2.0
+
+This product includes software developed as part of the
+E-Ink Launcher project (https://github.com/Modificator/E-Ink-Launcher),
+Copyright Modificator, licensed under the Apache License 2.0.
+
+====================================================================
+NOTICE OF MODIFICATIONS (Apache License 2.0, Section 4(b))
+====================================================================
+
+This repository is a MODIFIED VERSION of E-Ink Launcher.
+Baseline: master branch, versionName 0.1.8.6 / versionCode 30,
+commit 155738c ("feat: 添加应用排序设置").
+
+Modifications, all made in 2026:
+
+1. Grid layout now supports items spanning multiple cells.
+   - model/AppDataCenter.java: new Placement (col/row/span) and a
+     first-fit page packing algorithm; folders occupy 2x2, apps 1x1.
+   - widgets/EInkLauncherView.java: onMeasure/onLayout laid out by span;
+     per-cell grid-line background chosen by block position.
+
+2. Folders (new feature).
+   - model/FolderStore.java (new): JSON persistence of folders and
+     manual order in SharedPreferences "launcherFolders".
+   - widgets/FolderIconView.java (new): draws a 3x3 preview of up to
+     nine icons on a Canvas; hit-testing decides "launch child app"
+     versus "open folder".
+   - FolderDialog.java (new): folder contents dialog (launch, remove,
+     rename, dissolve).
+
+3. Manual icon ordering (new feature).
+   - widgets/AppItemBinder.java: order mode, selection highlight.
+   - Launcher.java / SettingFragment.java: entry point and callbacks.
+   - AppSortComparator: new SORT_MANUAL mode.
+
+4. Landscape support.
+   - Launcher.java: applyGrid() swaps columns/rows in landscape;
+     onConfigurationChanged() re-applies the grid in place.
+   - AndroidManifest.xml: configChanges added to the Launcher activity.
+
+5. Swipe-to-change-page fix (upstream bug).
+   - widgets/EInkLauncherView.java: the view now consumes touch events,
+     page changes are triggered on ACTION_MOVE, child touches are
+     cancelled so a swipe does not also click an icon.
+
+6. Icon loading.
+   - LineIcons.java (new): optional per-package line icons from
+     assets/icons/<package>.png, cached as Bitmap (a new BitmapDrawable
+     is created per use to avoid shared-bounds corruption).
+
+7. Minor additions: folder-name toggle (Config.KEY_SHOW_FOLDER_NAME),
+   new strings/arrays, layout changes in launcher_item.xml and
+   launcher_activity.xml.
+
+Third-party assets:
+   app/src/main/assets/icons/*.png are derived from Arcticons
+   (https://github.com/Donnnno/Arcticons), licensed CC BY-SA 4.0.
+   They are optional: if an icon is missing the launcher falls back to
+   the system icon.
