@@ -37,5 +37,6 @@
         <item>Usage time ↓</item>
         <item>Recent access ↑</item>
         <item>Recent access ↓</item>
+        <item>Manual order</item>
     </string-array>
 </resources>

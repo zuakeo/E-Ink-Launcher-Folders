@@ -28,7 +28,9 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -36,6 +38,8 @@ import cn.modificator.launcher.ftpservice.FTPReceiver;
 import cn.modificator.launcher.ftpservice.FTPService;
 import cn.modificator.launcher.model.AdminReceiver;
 import cn.modificator.launcher.model.AppDataCenter;
+import cn.modificator.launcher.model.AppSortComparator;
+import cn.modificator.launcher.model.FolderStore;
 import cn.modificator.launcher.model.HomeEntranceService;
 import cn.modificator.launcher.model.IconCache;
 import cn.modificator.launcher.model.WifiControl;
@@ -63,6 +67,7 @@ public class Launcher extends Activity
   // ---- Data ----
   private AppDataCenter dataCenter;
   private Config config;
+  private FolderStore folderStore;
   private Calendar calendar;
   private boolean isChina = true;
   private IconCache iconCache;
@@ -123,6 +128,7 @@ public class Launcher extends Activity
     setContentView(R.layout.launcher_activity);
 
     config = new Config(this);
+    folderStore = new FolderStore(this);
     WifiControl.init(this);
     applyStatusBarVisibility();
 
@@ -173,9 +179,11 @@ public class Launcher extends Activity
 
     // 配置 Binder、Adapter、View
     iconCache = new IconCache();
-    binder = new AppItemBinder(getPackageManager());
+    binder = new AppItemBinder(this);
     binder.setCallback(this);
     binder.setIconCache(iconCache);
+    binder.setFolderStore(folderStore);
+    binder.setAppNameLines(config.getAppNameLines());
     binder.setHideAppPkg(config.getHideApps());
     adapter = new LauncherAdapter();
     adapter.setBinder(binder);
@@ -186,6 +194,7 @@ public class Launcher extends Activity
 
     // 初始化数据中心
     dataCenter = new AppDataCenter(this);
+    dataCenter.setFolderStore(folderStore);
     dataCenter.setSortMode(config.getSortMode());
     dataCenter.setHideApps(config.getHideApps());
     dataCenter.setPageStatus(pageStatus);
@@ -231,6 +240,14 @@ public class Launcher extends Activity
       }
     });
 
+    // 排序模式：完成按钮
+    findViewById(R.id.orderFinish).setOnClickListener(new View.OnClickListener() {
+      @Override
+      public void onClick(View v) {
+        exitOrderMode();
+      }
+    });
+
     // 时间显示
     calendar = Calendar.getInstance();
     updateTimeShow();
@@ -267,6 +284,7 @@ public class Launcher extends Activity
   @Override
   public void onAppNameLinesChanged(int lines) {
     adapter.setAppNameLines(lines);
+    binder.setAppNameLines(lines);
   }
 
   @Override
@@ -339,8 +357,76 @@ public class Launcher extends Activity
     } else if (AppDataCenter.WIFI_PACKAGE_NAME.equals(packageName)) {
       WifiControl.onLongClickWifiItem();
     } else {
-      showAppInfoDialog(info, packageName);
+      showAppMenu(info, packageName);
     }
+  }
+
+  @Override
+  public void onFolderClick(View anchor, String folderId) {
+    FolderDialog.show(this, folderStore, folderId, new FolderDialog.Host() {
+      @Override
+      public void onFolderChanged() {
+        dataCenter.refreshAppList();
+      }
+    });
+  }
+
+  @Override
+  public void onFolderLongClick(View anchor, String folderId) {
+    final FolderStore.Folder folder = folderStore.getFolder(folderId);
+    if (folder == null) return;
+    final String[] actions = new String[]{
+        getString(R.string.folder_open),
+        getString(R.string.folder_rename),
+        getString(R.string.folder_dissolve)
+    };
+    new AlertDialog.Builder(this)
+        .setTitle(folder.name)
+        .setItems(actions, new DialogInterface.OnClickListener() {
+          @Override
+          public void onClick(DialogInterface dialog, int which) {
+            if (which == 0) {
+              onFolderClick(null, folderId);
+            } else if (which == 1) {
+              showRenameFolderDialog(folderId);
+            } else {
+              confirmDissolveFolder(folderId);
+            }
+          }
+        })
+        .setNegativeButton(R.string.dialog_cancel, null)
+        .show();
+  }
+
+  @Override
+  public void onOrderModeClick(View anchor, ResolveInfo info) {
+    String key = AppDataCenter.keyOf(info);
+    String selected = binder.getSelectedKey();
+
+    if (selected == null) {
+      binder.setSelectedKey(key);
+      adapter.refreshDisplay();
+      return;
+    }
+    if (selected.equals(key)) {
+      binder.setSelectedKey(null);
+      adapter.refreshDisplay();
+      return;
+    }
+
+    int from = dataCenter.indexOfKey(selected);
+    int to = dataCenter.indexOfKey(key);
+    if (from < 0 || to < 0) {
+      binder.setSelectedKey(key);
+      adapter.refreshDisplay();
+      return;
+    }
+    dataCenter.swapItems(from, to);
+    // 保持选中，方便连续挪动同一项
+    binder.setSelectedKey(key);
+    adapter.refreshDisplay();
+    int moved = dataCenter.indexOfKey(key);
+    if (moved >= 0) dataCenter.showPageOfItem(moved);
   }
 
   @Override
@@ -391,32 +477,211 @@ public class Launcher extends Activity
         .show();
   }
 
-  private void showAppInfoDialog(ResolveInfo info, final String packageName) {
+  /**
+   * 长按应用弹出的菜单：移入文件夹 / 隐藏 / 卸载。
+   */
+  private void showAppMenu(final ResolveInfo info, final String packageName) {
+    final List<String> actions = new ArrayList<>();
+    actions.add(getString(R.string.menu_move_to_folder));
+
+    final boolean hidden = binder.getHideAppPkg().contains(packageName);
+    actions.add(getString(hidden ? R.string.dialog_unhide : R.string.dialog_hide));
+
+    boolean canUninstall = false;
+    try {
+      canUninstall = (getPackageManager().getPackageInfo(packageName, 0).applicationInfo.flags
+          & ApplicationInfo.FLAG_SYSTEM) == 0;
+    } catch (PackageManager.NameNotFoundException ignored) {
+    }
+    if (canUninstall) {
+      actions.add(getString(R.string.dialog_uninstall));
+    }
+
     new AlertDialog.Builder(this)
         .setIcon(iconCache.getIcon(packageName, info, getPackageManager()))
         .setTitle(iconCache.getLabel(packageName, info, getPackageManager()))
-        .setMessage(getString(R.string.dialog_pkg_name, packageName))
-        .setPositiveButton(R.string.dialog_cancel, null)
-        .setNeutralButton(R.string.dialog_hide, new DialogInterface.OnClickListener() {
+        .setItems(actions.toArray(new String[0]), new DialogInterface.OnClickListener() {
           @Override
           public void onClick(DialogInterface dialog, int which) {
-            Set<String> hideApps = binder.getHideAppPkg();
-            if (!hideApps.add(packageName)) {
-              hideApps.remove(packageName);
+            if (which == 0) {
+              String appKey = FolderStore.appKey(packageName, info.activityInfo.name);
+              showMoveToFolderDialog(appKey, String.valueOf(
+                  iconCache.getLabel(packageName, info, getPackageManager())));
+            } else if (which == 1) {
+              Set<String> hideApps = binder.getHideAppPkg();
+              if (!hideApps.add(packageName)) {
+                hideApps.remove(packageName);
+              }
+              config.setHideApps(hideApps);
+              dataCenter.refreshAppList();
+            } else if (which == 2) {
+              Intent deleteIntent = new Intent(Intent.ACTION_DELETE,
+                  Uri.parse("package:" + packageName));
+              startActivity(deleteIntent);
             }
+          }
+        })
+        .setNegativeButton(R.string.dialog_cancel, null)
+        .show();
+  }
+
+  // =========================================================================
+  // 文件夹操作
+  // =========================================================================
+
+  /** 选择已有文件夹或新建一个 */
+  private void showMoveToFolderDialog(final String appKey, final String appLabel) {
+    final List<FolderStore.Folder> folders = new ArrayList<>(folderStore.getFolders());
+    String[] names = new String[folders.size() + 1];
+    for (int i = 0; i < folders.size(); i++) {
+      names[i] = folders.get(i).name;
+    }
+    names[folders.size()] = getString(R.string.folder_create_new);
+
+    new AlertDialog.Builder(this)
+        .setTitle(R.string.menu_move_to_folder)
+        .setItems(names, new DialogInterface.OnClickListener() {
+          @Override
+          public void onClick(DialogInterface dialog, int which) {
+            if (which < folders.size()) {
+              moveAppToFolder(folders.get(which).id, appKey);
+            } else {
+              showCreateFolderDialog(appLabel, appKey);
+            }
+          }
+        })
+        .setNegativeButton(R.string.dialog_cancel, null)
+        .show();
+  }
+
+  private void showCreateFolderDialog(final String defaultName, final String appKey) {
+    final android.widget.EditText input = new android.widget.EditText(this);
+    input.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+    input.setText(defaultName);
+    input.setSelection(input.getText().length());
+
+    new AlertDialog.Builder(this)
+        .setTitle(R.string.folder_create_new)
+        .setView(input)
+        .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+          @Override
+          public void onClick(DialogInterface dialog, int which) {
+            String name = input.getText().toString().trim();
+            if (name.length() == 0) name = defaultName;
+            FolderStore.Folder folder = folderStore.createFolder(name);
+            folderStore.save();
+            if (appKey != null) {
+              moveAppToFolder(folder.id, appKey);
+            } else {
+              dataCenter.refreshAppList();
+            }
+          }
+        })
+        .setNegativeButton(R.string.dialog_cancel, null)
+        .show();
+  }
+
+  /** 把应用放进文件夹，并让文件夹占据应用原来的位置 */
+  private void moveAppToFolder(String folderId, String appKey) {
+    dataCenter.materializeOrder();
+    List<String> order = new ArrayList<>(folderStore.getOrder());
+    int index = order.indexOf(appKey);
+
+    FolderStore.Folder folder = folderStore.getFolder(folderId);
+    boolean wasEmpty = folder != null && folder.items.isEmpty();
+
+    folderStore.addItemToFolder(folderId, appKey);
+    order.remove(appKey);
+    if (wasEmpty) {
+      if (index < 0 || index > order.size()) index = order.size();
+      order.add(index, FolderStore.folderKey(folderId));
+    }
+    folderStore.setOrder(order);
+
+    // 位置一旦手动调整，就切到自定义排序，否则会被名字排序冲掉
+    ensureManualSort();
+    dataCenter.refreshAppList();
+  }
+
+  private void showRenameFolderDialog(final String folderId) {
+    final FolderStore.Folder folder = folderStore.getFolder(folderId);
+    if (folder == null) return;
+    final android.widget.EditText input = new android.widget.EditText(this);
+    input.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+    input.setText(folder.name);
+    input.setSelection(input.getText().length());
+
+    new AlertDialog.Builder(this)
+        .setTitle(R.string.folder_rename)
+        .setView(input)
+        .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+          @Override
+          public void onClick(DialogInterface dialog, int which) {
+            String name = input.getText().toString().trim();
+            if (name.length() > 0) {
+              folderStore.renameFolder(folderId, name);
+              dataCenter.refreshAppList();
+            }
+          }
+        })
+        .setNegativeButton(R.string.dialog_cancel, null)
+        .show();
+  }
+
+  private void confirmDissolveFolder(final String folderId) {
+    final FolderStore.Folder folder = folderStore.getFolder(folderId);
+    if (folder == null) return;
+    new AlertDialog.Builder(this)
+        .setTitle(R.string.folder_dissolve)
+        .setMessage(getString(R.string.folder_dissolve_confirm, folder.name))
+        .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+          @Override
+          public void onClick(DialogInterface dialog, int which) {
+            dataCenter.materializeOrder();
+            List<String> released = folderStore.deleteFolder(folderId);
+            List<String> order = new ArrayList<>(folderStore.getOrder());
+            int insert = order.size();
+            order.addAll(released);
+            folderStore.setOrder(order);
+            ensureManualSort();
             dataCenter.refreshAppList();
           }
         })
-        .setNegativeButton(R.string.dialog_uninstall, new DialogInterface.OnClickListener() {
-          @Override
-          public void onClick(DialogInterface dialog, int which) {
-            Intent deleteIntent = new Intent(Intent.ACTION_DELETE,
-                Uri.parse("package:" + packageName));
-            startActivity(deleteIntent);
-          }
-        })
+        .setNegativeButton(R.string.dialog_cancel, null)
         .show();
   }
+
+  // =========================================================================
+  // 排序模式
+  // =========================================================================
+
+  private void ensureManualSort() {
+    config.setSortMode(AppSortComparator.SORT_MANUAL);
+    dataCenter.setSortMode(AppSortComparator.SORT_MANUAL);
+  }
+
+  @Override
+  public void onEnterOrderMode() {
+    if (binder.isDelete()) {
+      binder.setDelete(false);
+      findViewById(R.id.deleteFinish).setVisibility(View.GONE);
+    }
+    ensureManualSort();
+    dataCenter.refreshAppList();
+    dataCenter.materializeOrder();
+    binder.setOrderMode(true);
+    binder.setSelectedKey(null);
+    findViewById(R.id.orderBar).setVisibility(View.VISIBLE);
+    adapter.refreshDisplay();
+  }
+
+  private void exitOrderMode() {
+    binder.setOrderMode(false);
+    binder.setSelectedKey(null);
+    findViewById(R.id.orderBar).setVisibility(View.GONE);
+    adapter.refreshDisplay();
+  }
+
 
   // =========================================================================
   // 时间显示
@@ -583,6 +848,10 @@ public class Launcher extends Activity
 
   @Override
   public void onBackPressed() {
+    if (binder != null && binder.isOrderMode()) {
+      exitOrderMode();
+      return;
+    }
     if (getFragmentManager().getBackStackEntryCount() > 0) {
       super.onBackPressed();
       config.setFontSize(config.getFontSize());

@@ -34,18 +34,22 @@ public class LauncherAdapter {
   public static class ItemViewHolder {
     public final View itemView;
     public final ImageView appImage;
+    public final FolderIconView folderImage;
     public final ObserverFontTextView appName;
     public final View menuContainer;
     public final View menuDelete;
     public final View menuHide;
+    public final View selectBox;
 
     ItemViewHolder(View itemView) {
       this.itemView = itemView;
       appImage = itemView.findViewById(R.id.appImage);
+      folderImage = itemView.findViewById(R.id.folderImage);
       appName = (ObserverFontTextView) itemView.findViewById(R.id.appName);
       menuContainer = ((ViewGroup) itemView).getChildAt(1);
       menuDelete = itemView.findViewById(R.id.menu_delete);
       menuHide = itemView.findViewById(R.id.menu_hide);
+      selectBox = itemView.findViewById(R.id.selectBox);
     }
   }
 

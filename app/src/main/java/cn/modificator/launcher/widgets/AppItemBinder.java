@@ -1,5 +1,6 @@
 package cn.modificator.launcher.widgets;
 
+import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -9,13 +10,16 @@ import android.view.View;
 import android.widget.ImageView;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import cn.modificator.launcher.LineIcons;
 import cn.modificator.launcher.R;
 import cn.modificator.launcher.model.AppDataCenter;
+import cn.modificator.launcher.model.FolderStore;
 import cn.modificator.launcher.model.IconCache;
 import cn.modificator.launcher.model.WifiControl;
 
@@ -25,6 +29,12 @@ import cn.modificator.launcher.model.WifiControl;
  * <p>
  * 与 {@link LauncherAdapter} 协作：Adapter 管理 ViewHolder 池和数据列表，
  * Binder 处理"怎样把数据画到 View 上"以及"用户点了之后做什么"。
+ * <p>
+ * 两类特殊条目：
+ * <ul>
+ *   <li>文件夹：图标位置画 3×3 小图标矩阵</li>
+ *   <li>排序模式：点击图标只做"选中/交换"，不启动应用</li>
+ * </ul>
  */
 public class AppItemBinder {
 
@@ -45,18 +55,33 @@ public class AppItemBinder {
 
     /** 管理模式下切换隐藏状态 */
     void onItemHideToggle(String packageName, boolean hidden);
+
+    /** 点击文件夹 */
+    void onFolderClick(View anchor, String folderId);
+
+    /** 长按文件夹 */
+    void onFolderLongClick(View anchor, String folderId);
+
+    /** 排序模式下点击图标 */
+    void onOrderModeClick(View anchor, ResolveInfo info);
   }
 
   // =========================================================================
   // 字段
   // =========================================================================
 
+  private final Context context;
   private final PackageManager packageManager;
   private final Set<String> hideAppPkg = new HashSet<>();
 
   private Callback callback;
   private IconCache iconCache;
+  private FolderStore folderStore;
   private boolean isDelete = false;
+
+  private boolean orderMode = false;
+  private String selectedKey = null;
+  private int appNameLines = Integer.MAX_VALUE;
 
   // 当前绑定的数据（由 Adapter 在 bindAll 时传入）
   private List<ResolveInfo> dataRef;
@@ -65,8 +90,9 @@ public class AppItemBinder {
   // 构造器
   // =========================================================================
 
-  public AppItemBinder(PackageManager pm) {
-    this.packageManager = pm;
+  public AppItemBinder(Context context) {
+    this.context = context;
+    this.packageManager = context.getPackageManager();
   }
 
   // =========================================================================
@@ -81,16 +107,41 @@ public class AppItemBinder {
     this.iconCache = iconCache;
   }
 
+  public void setFolderStore(FolderStore folderStore) {
+    this.folderStore = folderStore;
+  }
+
   // =========================================================================
-  // 管理模式
+  // 管理模式 / 排序模式
   // =========================================================================
 
   public void setDelete(boolean delete) {
     this.isDelete = delete;
+    if (delete) {
+      orderMode = false;
+      selectedKey = null;
+    }
   }
 
   public boolean isDelete() {
     return isDelete;
+  }
+
+  public void setOrderMode(boolean orderMode) {
+    this.orderMode = orderMode;
+    if (!orderMode) selectedKey = null;
+  }
+
+  public boolean isOrderMode() {
+    return orderMode;
+  }
+
+  public String getSelectedKey() {
+    return selectedKey;
+  }
+
+  public void setSelectedKey(String key) {
+    this.selectedKey = key;
   }
 
   // =========================================================================
@@ -137,8 +188,15 @@ public class AppItemBinder {
   void updateDeleteState(List<LauncherAdapter.ItemViewHolder> holders, List<ResolveInfo> data) {
     for (int i = 0; i < holders.size() && i < data.size(); i++) {
       LauncherAdapter.ItemViewHolder holder = holders.get(i);
+      boolean folder = AppDataCenter.isFolderPackage(data.get(i).activityInfo.packageName);
 
       if (!isDelete) {
+        holder.menuContainer.setVisibility(View.GONE);
+        continue;
+      }
+
+      // 文件夹不参与批量隐藏/卸载，避免误操作
+      if (folder) {
         holder.menuContainer.setVisibility(View.GONE);
         continue;
       }
@@ -170,18 +228,35 @@ public class AppItemBinder {
     ResolveInfo info = dataRef.get(position);
     String pkg = info.activityInfo.packageName;
 
-    // —— 图标 & 标签 ——
-    if (AppDataCenter.WIFI_PACKAGE_NAME.equals(pkg)) {
+    // —— 文件夹 ——
+    if (AppDataCenter.isFolderPackage(pkg)) {
+      bindFolder(holder, AppDataCenter.folderIdOf(pkg), customIcons);
+    } else if (AppDataCenter.WIFI_PACKAGE_NAME.equals(pkg)) {
+      holder.folderImage.setVisibility(View.GONE);
+      holder.appImage.setVisibility(View.VISIBLE);
       WifiControl.bind(holder.itemView, customIcons);
+      holder.appName.setMaxLines(appNameLines);
     } else if (AppDataCenter.LOCK_PACKAGE_NAME.equals(pkg)) {
+      holder.folderImage.setVisibility(View.GONE);
+      holder.appImage.setVisibility(View.VISIBLE);
       loadIcon(holder.appImage, pkg, R.drawable.ic_onekeylock, customIcons);
       holder.appName.setText(R.string.item_lockscreen);
+      holder.appName.setMaxLines(appNameLines);
     } else {
+      holder.folderImage.setVisibility(View.GONE);
+      holder.appImage.setVisibility(View.VISIBLE);
       loadIcon(holder.appImage, pkg, info, customIcons);
       holder.appName.setText(iconCache != null
           ? iconCache.getLabel(pkg, info, packageManager)
           : info.loadLabel(packageManager));
+      holder.appName.setMaxLines(appNameLines);
     }
+
+    // —— 排序模式的高亮 ——
+    boolean selected = orderMode
+        && selectedKey != null
+        && selectedKey.equals(AppDataCenter.keyOf(info));
+    holder.selectBox.setVisibility(selected ? View.VISIBLE : View.GONE);
 
     // —— 监听器（通过 tag 传递 position，复用单例监听器） ——
     holder.itemView.setTag(position);
@@ -196,9 +271,56 @@ public class AppItemBinder {
     holder.itemView.setAlpha(1);
   }
 
+  private void bindFolder(LauncherAdapter.ItemViewHolder holder, String folderId,
+                          Map<String, File> customIcons) {
+    FolderStore.Folder folder = folderStore != null ? folderStore.getFolder(folderId) : null;
+    holder.appImage.setVisibility(View.GONE);
+    holder.folderImage.setVisibility(View.VISIBLE);
+    holder.folderImage.setIcons(loadFolderIcons(folder, customIcons));
+    holder.appName.setText(folder != null ? folder.name : "");
+    // 名字被用户关掉时，文件夹仍然显示一行名字，否则无法分辨
+    holder.appName.setMaxLines(appNameLines <= 0 ? 1 : appNameLines);
+  }
+
+  /** 取文件夹里前 9 个应用的图标 */
+  private List<Drawable> loadFolderIcons(FolderStore.Folder folder,
+                                         Map<String, File> customIcons) {
+    List<Drawable> icons = new ArrayList<>();
+    if (folder == null) return icons;
+
+    for (String itemKey : folder.items) {
+      if (icons.size() >= 9) break;
+      String pkg = AppDataCenter.packageOfKey(itemKey);
+      if (pkg == null) continue;
+      if (hideAppPkg.contains(pkg)) continue;
+
+      File custom = customIcons != null ? customIcons.get(pkg) : null;
+      if (custom != null) {
+        Drawable d = Drawable.createFromPath(custom.getAbsolutePath());
+        if (d != null) {
+          icons.add(d);
+          continue;
+        }
+      }
+      try {
+        Drawable base = packageManager.getApplicationIcon(pkg);
+        icons.add(LineIcons.load(context, pkg, base));
+      } catch (Exception ignored) {
+      }
+    }
+    return icons;
+  }
+
+  public void setAppNameLines(int lines) {
+    this.appNameLines = lines;
+  }
+
   private void clearItem(LauncherAdapter.ItemViewHolder holder) {
     holder.appName.setText("");
     holder.appImage.setImageDrawable(null);
+    holder.folderImage.setIcons(null);
+    holder.folderImage.setVisibility(View.GONE);
+    holder.selectBox.setVisibility(View.GONE);
     holder.itemView.setOnClickListener(null);
     holder.itemView.setOnLongClickListener(null);
     holder.menuDelete.setOnClickListener(null);
@@ -229,7 +351,7 @@ public class AppItemBinder {
       Drawable icon = iconCache != null
           ? iconCache.getIcon(pkg, info, packageManager)
           : info.loadIcon(packageManager);
-      iv.setImageDrawable(icon);
+      iv.setImageDrawable(LineIcons.load(context, pkg, icon));
     }
   }
 
@@ -243,11 +365,23 @@ public class AppItemBinder {
       if (callback == null || dataRef == null) return;
       int pos = (int) v.getTag();
       if (pos >= dataRef.size()) return;
+      ResolveInfo info = dataRef.get(pos);
+      String pkg = info.activityInfo.packageName;
+
       if (isDelete) {
-        callback.onItemDeleteClick(dataRef.get(pos));
-      } else {
-        callback.onItemClick(dataRef.get(pos));
+        if (!AppDataCenter.isFolderPackage(pkg)) callback.onItemDeleteClick(info);
+        return;
       }
+      // 排序模式下文件夹也参与选中/交换，不打开
+      if (orderMode) {
+        callback.onOrderModeClick(v, info);
+        return;
+      }
+      if (AppDataCenter.isFolderPackage(pkg)) {
+        callback.onFolderClick(v, AppDataCenter.folderIdOf(pkg));
+        return;
+      }
+      callback.onItemClick(info);
     }
   };
 
@@ -257,7 +391,18 @@ public class AppItemBinder {
       if (callback == null || dataRef == null) return false;
       int pos = (int) v.getTag();
       if (pos >= dataRef.size()) return false;
-      callback.onItemLongClick(v, dataRef.get(pos));
+      ResolveInfo info = dataRef.get(pos);
+      String pkg = info.activityInfo.packageName;
+
+      if (orderMode) {
+        callback.onOrderModeClick(v, info);
+        return true;
+      }
+      if (AppDataCenter.isFolderPackage(pkg)) {
+        callback.onFolderLongClick(v, AppDataCenter.folderIdOf(pkg));
+        return true;
+      }
+      callback.onItemLongClick(v, info);
       return true;
     }
   };

@@ -105,5 +105,36 @@
             android:text="@string/app_manager_finish"
             android:textSize="18sp"
             android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/orderBar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/white"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:paddingLeft="10dp"
+                android:text="@string/order_hint"
+                android:textColor="#000000"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/orderFinish"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:clickable="true"
+                android:gravity="center"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:text="@string/order_finish"
+                android:textColor="#000000"
+                android:textSize="16sp" />
+        </LinearLayout>
     </FrameLayout>
 </LinearLayout>

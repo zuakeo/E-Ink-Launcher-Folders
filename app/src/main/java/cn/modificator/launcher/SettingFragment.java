@@ -44,6 +44,8 @@ public class SettingFragment extends Fragment implements View.OnClickListener {
     void onShowCustomIconChanged(boolean show);
     void onSortModeChanged(int mode);
     void onEnterManageMode();
+    /** 进入"调整图标顺序"模式 */
+    void onEnterOrderMode();
   }
 
   private OnSettingChangeListener listener;
@@ -102,6 +104,7 @@ public class SettingFragment extends Fragment implements View.OnClickListener {
     rootView.findViewById(R.id.helpAbout).setOnClickListener(this);
     rootView.findViewById(R.id.menu_ftp).setOnClickListener(this);
     rootView.findViewById(R.id.openDeviceManager).setOnClickListener(this);
+    rootView.findViewById(R.id.orderEdit).setOnClickListener(this);
 
     showStatusBar = rootView.findViewById(R.id.showStatusBar);
     showCustomIcon = rootView.findViewById(R.id.showCustomIcon);
@@ -250,6 +253,10 @@ public class SettingFragment extends Fragment implements View.OnClickListener {
     } else if (id == R.id.openDeviceManager) {
       startActivity(new Intent().setComponent(
           new ComponentName("com.android.settings", "com.android.settings.DeviceAdminSettings")));
+    } else if (id == R.id.orderEdit) {
+      // 先关设置页再进排序模式，避免 onBackPressed 被桌面拦截
+      getFragmentManager().popBackStack();
+      listener.onEnterOrderMode();
     }
   }
 

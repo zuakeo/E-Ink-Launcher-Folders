@@ -79,4 +79,17 @@
     <string name="app_show_name">App name</string>
     <string name="setting_sort_mode">Sort</string>
     <string name="sort_need_usage_permission">Please grant usage access permission for this sort mode</string>
+    <string name="setting_order_edit">Adjust Icon Order</string>
+    <string name="order_hint">Tap an icon, then tap a target cell to swap</string>
+    <string name="order_finish">Done</string>
+    <string name="menu_move_to_folder">Move to folder…</string>
+    <string name="dialog_unhide">Unhide</string>
+    <string name="folder_create_new">+ New folder</string>
+    <string name="folder_open">Open</string>
+    <string name="folder_rename">Rename</string>
+    <string name="folder_dissolve">Dissolve folder</string>
+    <string name="folder_dissolve_confirm">Put all apps in \"%1$s\" back to desktop?</string>
+    <string name="folder_close">Close</string>
+    <string name="folder_remove_title">Remove from folder</string>
+    <string name="folder_remove_confirm">Remove</string>
 </resources>

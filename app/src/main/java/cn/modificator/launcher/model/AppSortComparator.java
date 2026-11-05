@@ -41,6 +41,8 @@ public class AppSortComparator implements Comparator<ResolveInfo> {
   public static final int SORT_USAGE_DESC = 5;
   public static final int SORT_RECENT_ASC = 6;
   public static final int SORT_RECENT_DESC = 7;
+  /** 自定义（手动）顺序，由 {@link FolderStore} 的 order 列表决定 */
+  public static final int SORT_MANUAL = 8;
 
   private final int mode;
   private final PackageManager pm;

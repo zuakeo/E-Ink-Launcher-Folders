@@ -472,6 +472,20 @@
                 android:background="#000000" />
 
             <TextView
+                android:id="@+id/orderEdit"
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/menu_item_height"
+                android:paddingLeft="20dp"
+                android:gravity="left|center_vertical"
+                android:text="@string/setting_order_edit"
+                android:textSize="@dimen/menu_item_text_size" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#000000" />
+
+            <TextView
                 android:id="@+id/hideDivider"
                 android:layout_width="match_parent"
                 android:layout_height="@dimen/menu_item_height"

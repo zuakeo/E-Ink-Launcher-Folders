@@ -37,5 +37,6 @@
         <item>使用时长 ↓</item>
         <item>最近访问 ↑</item>
         <item>最近访问 ↓</item>
+        <item>自定义顺序</item>
     </string-array>
 </resources>

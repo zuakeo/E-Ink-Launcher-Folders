@@ -34,6 +34,13 @@
                 app:reference="width"
                 tools:src="@mipmap/ic_launcher" />
 
+            <cn.modificator.launcher.widgets.FolderIconView
+                android:id="@+id/folderImage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.5"
+                android:visibility="gone" />
+
             <View
                 android:layout_width="wrap_content"
                 android:layout_height="0.1dp"
@@ -89,4 +96,14 @@
             android:tint="#000000" />
 
     </LinearLayout>
+
+    <!-- 排序模式下选中项的黑框 -->
+    <View
+        android:id="@+id/selectBox"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/app_item_selected"
+        android:clickable="false"
+        android:focusable="false"
+        android:visibility="gone" />
 </FrameLayout>
