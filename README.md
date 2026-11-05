@@ -283,6 +283,22 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell cmd package set-home-activity cn.modificator.launcher/.Launcher
 ```
 
+### 一键同步（作者自用）
+
+仓库根目录带了 `sync.sh`，改完代码不用记一堆命令：
+
+```bash
+./sync.sh "这次改了什么"            # 编译 + 提交 + 推送到 GitHub
+./sync.sh --no-build "只改了文档"   # 跳过编译
+./sync.sh --release "本次改动要点"  # 升版本 + 编译 + 改 README + 推送 + 发 Release
+./sync.sh --dry-run "看看会做什么"  # 只打印计划，不动仓库
+```
+
+它会：编译前先确认 JDK / 失败就中止（不会推半成品）→ 提交 → 推 `publish` 分支 →
+`--release` 时自动把 `versionCode` / `versionName` 各加一、更新 README 的下载链接和变更记录、
+建 tag、走 REST API 发 Release 并上传 APK（`gh release create` 会因 token 缺 `workflow` scope 失败，所以绕开）。
+APK 只进 Release 不进 git（`.gitignore` 里有 `*.apk`）。
+
 ### 关于线条图标
 
 `app/src/main/assets/icons/*.png` 是从 [Arcticons](https://github.com/Donnnno/Arcticons)（CC BY-SA 4.0）
