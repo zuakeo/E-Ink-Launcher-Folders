@@ -45,6 +45,7 @@ public class EInkLauncherView extends ViewGroup {
   private float touchDownX;
   private float touchDownY;
   private float swipeThreshold;
+  private boolean swipeHandled;
 
   // =========================================================================
   // 构造器
@@ -247,21 +248,48 @@ public class EInkLauncherView extends ViewGroup {
 
   @Override
   public boolean dispatchTouchEvent(MotionEvent event) {
-    switch (event.getActionMasked()) {
-      case MotionEvent.ACTION_DOWN:
-        touchDownX = event.getX();
-        touchDownY = event.getY();
-        break;
-      case MotionEvent.ACTION_UP:
-        int dir = detectSwipe(event.getX(), event.getY());
-        if (dir != 0 && pageChangeListener != null) {
+    int action = event.getActionMasked();
+
+    if (action == MotionEvent.ACTION_DOWN) {
+      touchDownX = event.getX();
+      touchDownY = event.getY();
+      swipeHandled = false;
+      return super.dispatchTouchEvent(event);
+    }
+
+    // 已经因为滑动翻过页了，剩下的 MOVE/UP 不再交给子 View（避免滑动结束时误点图标）
+    if (swipeHandled) {
+      return true;
+    }
+
+    if (action == MotionEvent.ACTION_MOVE || action == MotionEvent.ACTION_UP) {
+      int dir = detectSwipe(event.getX(), event.getY());
+      if (dir != 0) {
+        swipeHandled = true;
+        cancelChildTouch(event);
+        if (pageChangeListener != null) {
           if (dir > 0) pageChangeListener.onPagePrev();
           else pageChangeListener.onPageNext();
-          return true;
         }
-        break;
+        return true;
+      }
     }
+
     return super.dispatchTouchEvent(event);
+  }
+
+  /** 把当前子 View 的手势取消掉，避免它在翻页后还触发点击 */
+  private void cancelChildTouch(MotionEvent event) {
+    MotionEvent cancel = MotionEvent.obtain(event);
+    cancel.setAction(MotionEvent.ACTION_CANCEL);
+    super.dispatchTouchEvent(cancel);
+    cancel.recycle();
+  }
+
+  /** 空白格子也要能收到 DOWN/UP，否则从空白处起手的滑动会被系统吞掉 */
+  @Override
+  public boolean onTouchEvent(MotionEvent event) {
+    return true;
   }
 
   /**
@@ -270,7 +298,6 @@ public class EInkLauncherView extends ViewGroup {
    * @return 1 = 上一页, -1 = 下一页, 0 = 无有效滑动
    */
   private int detectSwipe(float upX, float upY) {
-    if (swipeThreshold <= 0) return 0;
     float dx = upX - touchDownX;
     float dy = upY - touchDownY;
     if (dx > swipeThreshold || dy > swipeThreshold) return 1;

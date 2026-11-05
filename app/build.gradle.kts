@@ -11,8 +11,8 @@ android {
         applicationId = "cn.modificator.launcher"
         minSdk = 14
         targetSdk = 36
-        versionCode = 32
-        versionName = "0.1.8.6-folders2"
+        versionCode = 33
+        versionName = "0.1.8.6-folders3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
