@@ -29,7 +29,7 @@ public class FolderIconView extends View {
   public static final int GRID = 3;
   private static final int MAX_ICONS = GRID * GRID;
   /** 小图标占单元格的比例 */
-  private static final float ICON_SCALE = 0.78f;
+  private static final float ICON_SCALE = 0.82f;
 
   public interface OnFolderPressListener {
     /** 点中第 index 个小图标 */
@@ -47,6 +47,8 @@ public class FolderIconView extends View {
   private final Rect cell = new Rect();
 
   private OnFolderPressListener pressListener;
+  /** true = 撑满 2×2 格子的高度；显示名字时改回正方形 */
+  private boolean fillHeight = true;
 
   public FolderIconView(Context context) {
     this(context, null);
@@ -71,6 +73,10 @@ public class FolderIconView extends View {
     this.pressListener = listener;
   }
 
+  public void setFillHeight(boolean fillHeight) {
+    this.fillHeight = fillHeight;
+  }
+
   public void setItems(List<Drawable> drawables, List<String> itemKeys) {
     icons.clear();
     keys.clear();
@@ -85,7 +91,11 @@ public class FolderIconView extends View {
     if (MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED) {
       width = (int) (getResources().getDisplayMetrics().density * 64);
     }
-    setMeasuredDimension(width, width);
+    int height = MeasureSpec.getSize(heightMeasureSpec);
+    boolean useHeight = fillHeight
+        && MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.UNSPECIFIED
+        && height > width;
+    setMeasuredDimension(width, useHeight ? height : width);
   }
 
   @Override
@@ -122,7 +132,7 @@ public class FolderIconView extends View {
   }
 
   private void computeBox(int w, int h) {
-    float inset = Math.max(borderPaint.getStrokeWidth(), Math.min(w, h) * 0.05f);
+    float inset = Math.max(borderPaint.getStrokeWidth(), w * 0.02f);
     box.set(inset, inset, w - inset, h - inset);
   }
 
@@ -164,9 +174,9 @@ public class FolderIconView extends View {
 
     float cellW = box.width() / GRID;
     float cellH = box.height() / GRID;
+    // 只按图标实际绘制范围命中，格子之间的空隙留给"展开文件夹"
     float iconSize = Math.min(cellW, cellH) * ICON_SCALE;
-    float tolerance = Math.min(cellW, cellH) * 0.10f;
-    float reach = iconSize / 2f + tolerance;
+    float reach = iconSize / 2f;
 
     int count = Math.min(MAX_ICONS, keys.size());
     for (int i = 0; i < count; i++) {

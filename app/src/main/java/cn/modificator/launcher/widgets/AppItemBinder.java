@@ -285,6 +285,7 @@ public class AppItemBinder {
     FolderStore.Folder folder = folderStore != null ? folderStore.getFolder(folderId) : null;
     holder.appImage.setVisibility(View.GONE);
     holder.folderImage.setVisibility(View.VISIBLE);
+    holder.folderImage.setFillHeight(!showFolderName);
     setIconWeight(holder.folderImage, 0f);
 
     List<Drawable> icons = new ArrayList<>();

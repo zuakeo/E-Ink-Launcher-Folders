@@ -373,6 +373,11 @@ public class Launcher extends Activity
   public void onFolderClick(View anchor, String folderId) {
     FolderDialog.show(this, folderStore, folderId, new FolderDialog.Host() {
       @Override
+      public void beforeFolderChange() {
+        dataCenter.materializeOrder();
+      }
+
+      @Override
       public void onFolderChanged() {
         dataCenter.refreshAppList();
       }

@@ -34,6 +34,9 @@ public class FolderDialog {
 
   /** 宿主回调 */
   public interface Host {
+    /** 文件夹内容即将变化：把当前桌面顺序固化下来 */
+    void beforeFolderChange();
+
     /** 桌面需要刷新（文件夹内容变了） */
     void onFolderChanged();
   }
@@ -153,7 +156,7 @@ public class FolderDialog {
           cell.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View v) {
-              confirmRemoveFromFolder(context, store, folderId, itemKey, pkg, new Runnable() {
+              confirmRemoveFromFolder(context, store, folderId, itemKey, pkg, host, new Runnable() {
                 @Override
                 public void run() {
                   if (store.getFolder(folderId) == null) {
@@ -211,13 +214,15 @@ public class FolderDialog {
 
   private static void confirmRemoveFromFolder(final Context context, final FolderStore store,
                                               final String folderId, final String itemKey,
-                                              String pkg, final Runnable onDone) {
+                                              String pkg, final Host host,
+                                              final Runnable onDone) {
     new AlertDialog.Builder(context)
         .setTitle(R.string.folder_remove_title)
         .setMessage(pkg)
         .setPositiveButton(R.string.folder_remove_confirm, new DialogInterface.OnClickListener() {
           @Override
           public void onClick(DialogInterface dialog, int which) {
+            if (host != null) host.beforeFolderChange();
             int insertAt = store.getOrder().indexOf(FolderStore.folderKey(folderId));
             store.removeItemFromFolder(folderId, itemKey);
             store.insertOrder(itemKey, insertAt < 0 ? store.getOrder().size() : insertAt + 1);
