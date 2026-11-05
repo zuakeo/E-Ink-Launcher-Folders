@@ -2,6 +2,8 @@
 
 > 2×2 九宫格文件夹 · 自定义图标顺序 · 横屏自动换排
 
+**成品 APK（debug 签名）**：[Releases](https://github.com/zuakeo/E-Ink-Launcher-Folders/releases/latest) → `E-Ink-Launcher-Folders-0.1.8.6-folders6.apk`
+
 ![portrait](docs/screenshot-portrait.png)
 
 ---
